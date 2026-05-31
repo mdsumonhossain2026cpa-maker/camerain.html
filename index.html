@@ -12,40 +12,40 @@
     </style>
 </head>
 <body>
-
     <h2>🎥 ক্যামেরা সোর্স (Sender)</h2>
-    <div class="status" id="status">ক্যামেরা চালু হচ্ছে...</div>
-    
+    <div class="status" id="status">সার্ভারে কানেক্ট হচ্ছে...</div>
     <video id="localVideo" autoplay playsinline muted></video>
 
     <script>
         let localStream;
-        const CAMERA_ID = 'akash-remote-camera-123'; // আইডি পরিবর্তন করা হয়েছে
+        const CAMERA_ID = 'akash-cam-12345'; // নির্দিষ্ট আইডি
         const peer = new Peer(CAMERA_ID);
 
-        // ১. প্রথমে ক্যামেরা চালু করা
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true })
-        .then((stream) => {
-            localStream = stream;
-            document.getElementById('localVideo').srcObject = stream;
-            document.getElementById('status').innerText = "ক্যামেরা রেডি! ভিউয়ারের কলের অপেক্ষায়...";
-        })
-        .catch(err => {
-            document.getElementById('status').innerHTML = `<span style="color:red">ক্যামেরা এরর: ${err.message}</span>`;
+        peer.on('open', (id) => {
+            document.getElementById('status').innerText = "ক্যামেরা রেডি! ভিউয়ারের অপেক্ষায়...";
+            startCamera();
         });
 
-        // ২. ভিউয়ার যখন ভিডিওর জন্য কল করবে, তখন কল রিসিভ করে ভিডিও পাঠানো
-        peer.on('call', (call) => {
-            document.getElementById('status').innerText = "ভিউয়ার কানেক্ট হয়েছে! লাইভ সম্প্রচার চলছে...";
-            call.answer(localStream); // ভিউয়ারকে ভিডিও স্ট্রিম দেওয়া হলো
-        });
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true })
+            .then((stream) => {
+                localStream = stream;
+                document.getElementById('localVideo').srcObject = stream;
+            })
+            .catch(err => {
+                document.getElementById('status').innerHTML = `<span style="color:red">ক্যামেরা এরর: ${err.message}</span>`;
+            });
+        }
 
-        // ৩. টর্চ লাইট কমান্ড শোনার জন্য ডাটা কানেকশন
+        // ভিউয়ার যখন ডাটা কানেক্ট করবে
         peer.on('connection', (conn) => {
+            document.getElementById('status').innerText = "ভিউয়ার কানেক্ট হয়েছে! ভিডিও পাঠানো হচ্ছে...";
+            
+            // ক্যামেরা ফোন নিজে থেকে ভিউয়ারকে ভিডিও কল ব্যাক করবে (এটি সমস্যার সমাধান করবে)
+            peer.call(conn.peer, localStream);
+
             conn.on('data', (data) => {
-                if (data === 'toggle-flash') {
-                    toggleFlashlight();
-                }
+                if (data === 'toggle-flash') toggleFlashlight();
             });
         });
 
