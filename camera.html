@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ক্যামেরা ফোন (Sender)</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background: #222; color: #fff; padding: 20px; }
+        video { width: 100%; max-width: 400px; border-radius: 10px; border: 3px solid #00ff00; background: #000; }
+        .status { font-size: 18px; color: #00ff00; margin: 15px 0; }
+    </style>
+</head>
+<body>
+
+    <h2>🎥 ক্যামেরা সোর্স (Sender)</h2>
+    <div class="status" id="status">সার্ভারের সাথে কানেক্ট হচ্ছে...</div>
+    <p>ক্যামেরা আইডি: <b id="peer-id" style="color: yellow;">লুডিং...</b></p>
+    
+    <video id="localVideo" autoplay playsinline muted></video>
+
+    <script>
+        let localStream;
+        let currentConn;
+        
+        // একটি নির্দিষ্ট আইডি সেট করছি যাতে ভিউয়ার সহজে কানেক্ট হতে পারে
+        const CAMERA_ID = 'my-secret-remote-camera-123'; 
+        const peer = new Peer(CAMERA_ID);
+
+        peer.on('open', (id) => {
+            document.getElementById('peer-id').innerText = id;
+            document.getElementById('status').innerText = "ক্যামেরা রেডি! ভিউয়ার ফোনের জন্য অপেক্ষা করা হচ্ছে...";
+            startCamera();
+        });
+
+        // ক্যামেরা এবং মাইক্রোফোন চালু করা
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" }, // পিছনের ক্যামেরা চালু হবে
+                audio: true 
+            })
+            .then((stream) => {
+                localStream = stream;
+                document.getElementById('localVideo').srcObject = stream;
+            })
+            .catch(err => {
+                document.getElementById('status').innerText = "ক্যামেরা পারমিশন দিন!";
+                alert("ক্যামেরা ওপেন করা যায়নি: " + err);
+            });
+        }
+
+        // যখন ভিউয়ার ফোন ডাটা চ্যানেলে কানেক্ট হবে
+        peer.on('connection', (conn) => {
+            currentConn = conn;
+            document.getElementById('status').innerText = "ভিউয়ার কানেক্ট হয়েছে! ভিডিও পাঠানো হচ্ছে...";
+
+            // কানেক্ট হওয়ার সাথে সাথে ভিউয়ারকে ভিডিও কল ব্যাক করা হবে
+            peer.call(conn.peer, localStream);
+
+            // ভিউয়ার থেকে আসা রিমোট কমান্ড বা ভয়েস কন্ট্রোল শোনা
+            conn.on('data', (data) => {
+                if (data === 'toggle-flash') {
+                    toggleFlashlight();
+                }
+            });
+        });
+
+        // দূর থেকে ফ্ল্যাশলাইট জ্বালানোর ফাংশন (কাজ করবে যদি ব্রাউজার সাপোর্ট করে)
+        function toggleFlashlight() {
+            if (!localStream) return;
+            const track = localStream.getVideoTracks()[0];
+            const capabilities = track.getCapabilities();
+            
+            if (capabilities.torch) {
+                const constraints = track.getConstraints();
+                const torchStatus = constraints.advanced && constraints.advanced[0] && constraints.advanced[0].torch;
+                track.applyConstraints({
+                    advanced: [{ torch: !torchStatus }]
+                });
+                document.getElementById('status').innerText = `ফ্ল্যাশলাইট ${!torchStatus ? 'অন' : 'অফ'} করা হয়েছে`;
+            } else {
+                alert("এই ফোনের ব্রাউজার দিয়ে ফ্ল্যাশলাইট কন্ট্রোল সম্ভব নয়।");
+            }
+        }
+    </script>
+</body>
+</html>
