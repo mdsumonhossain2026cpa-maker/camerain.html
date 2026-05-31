@@ -18,8 +18,10 @@
 
     <script>
         let localStream;
-        const CAMERA_ID = 'akash-cam-12345'; // নির্দিষ্ট আইডি
+        let currentFacingMode = 'environment'; // ডিফল্ট পিছনের ক্যামেরা
+        const CAMERA_ID = 'akash-cam-12345'; 
         const peer = new Peer(CAMERA_ID);
+        let activeCall = null; 
 
         peer.on('open', (id) => {
             document.getElementById('status').innerText = "ক্যামেরা রেডি! ভিউয়ারের অপেক্ষায়...";
@@ -27,25 +29,35 @@
         });
 
         function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true })
+            // আগের ক্যামেরা চালু থাকলে বন্ধ করা
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop()); 
+            }
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: currentFacingMode }, audio: true })
             .then((stream) => {
                 localStream = stream;
                 document.getElementById('localVideo').srcObject = stream;
+                
+                // ভিডিও চলাকালীন ক্যামেরা সুইচ করলে লাইভ স্ট্রিম আপডেট করে দেওয়া
+                if (activeCall && activeCall.peerConnection) {
+                    const videoTrack = stream.getVideoTracks()[0];
+                    const senders = activeCall.peerConnection.getSenders();
+                    const sender = senders.find(s => s.track && s.track.kind === 'video');
+                    if (sender) sender.replaceTrack(videoTrack);
+                }
             })
             .catch(err => {
                 document.getElementById('status').innerHTML = `<span style="color:red">ক্যামেরা এরর: ${err.message}</span>`;
             });
         }
 
-        // ভিউয়ার যখন ডাটা কানেক্ট করবে
         peer.on('connection', (conn) => {
             document.getElementById('status').innerText = "ভিউয়ার কানেক্ট হয়েছে! ভিডিও পাঠানো হচ্ছে...";
-            
-            // ক্যামেরা ফোন নিজে থেকে ভিউয়ারকে ভিডিও কল ব্যাক করবে (এটি সমস্যার সমাধান করবে)
-            peer.call(conn.peer, localStream);
+            activeCall = peer.call(conn.peer, localStream);
 
             conn.on('data', (data) => {
                 if (data === 'toggle-flash') toggleFlashlight();
+                if (data === 'switch-camera') switchCamera();
             });
         });
 
@@ -57,6 +69,11 @@
                 const isTorchOn = track.getConstraints().advanced?.[0]?.torch;
                 track.applyConstraints({ advanced: [{ torch: !isTorchOn }] });
             }
+        }
+
+        function switchCamera() {
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            startCamera();
         }
     </script>
 </body>
