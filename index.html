@@ -9,51 +9,55 @@
         body { font-family: Arial, sans-serif; text-align: center; background: #222; color: #fff; padding: 20px; }
         video { width: 100%; max-width: 400px; border-radius: 10px; border: 3px solid #00ff00; background: #000; }
         .status { font-size: 16px; color: #00ff00; margin: 15px 0; background: #111; padding: 10px; border-radius: 5px;}
-        .error-msg { color: red; font-weight: bold; }
-        button { padding: 10px; margin-top: 10px; cursor: pointer; background: #555; color: white; border: none; border-radius: 5px; }
     </style>
 </head>
 <body>
 
     <h2>🎥 ক্যামেরা সোর্স (Sender)</h2>
-    
-    <button onclick="alert('সতর্কতা: HTML ব্রাউজার থেকে সরাসরি ফোনের Background বা Battery Settings পরিবর্তন করা যায় না। এর জন্য Android App (APK) প্রয়োজন।')">⚙️ Settings (Permission)</button>
-    
-    <div class="status" id="status">সার্ভারের সাথে কানেক্ট হচ্ছে...</div>
-    <p>ক্যামেরা আইডি: <b id="peer-id" style="color: yellow;">লোডিং...</b></p>
+    <div class="status" id="status">ক্যামেরা চালু হচ্ছে...</div>
     
     <video id="localVideo" autoplay playsinline muted></video>
 
     <script>
         let localStream;
-        const CAMERA_ID = 'my-secret-remote-camera-123'; 
+        const CAMERA_ID = 'akash-remote-camera-123'; // আইডি পরিবর্তন করা হয়েছে
         const peer = new Peer(CAMERA_ID);
 
-        peer.on('open', (id) => {
-            document.getElementById('peer-id').innerText = id;
-            document.getElementById('status').innerText = "ক্যামেরা রেডি করার চেষ্টা চলছে...";
-            startCamera();
+        // ১. প্রথমে ক্যামেরা চালু করা
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true })
+        .then((stream) => {
+            localStream = stream;
+            document.getElementById('localVideo').srcObject = stream;
+            document.getElementById('status').innerText = "ক্যামেরা রেডি! ভিউয়ারের কলের অপেক্ষায়...";
+        })
+        .catch(err => {
+            document.getElementById('status').innerHTML = `<span style="color:red">ক্যামেরা এরর: ${err.message}</span>`;
         });
 
-        function startCamera() {
-            // সিম্পল ভিডিও পারমিশন (ল্যাপটপ ও মোবাইল সবখানে কাজ করবে)
-            navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then((stream) => {
-                localStream = stream;
-                document.getElementById('localVideo').srcObject = stream;
-                document.getElementById('status').innerText = "ক্যামেরা সফলভাবে ওপেন হয়েছে! ভিউয়ারের জন্য অপেক্ষা করছি...";
-            })
-            .catch(err => {
-                // কেন ক্যামেরা ওপেন হলো না, তা লাল রঙে স্ক্রিনে দেখাবে
-                console.error(err);
-                document.getElementById('status').innerHTML = `<span class="error-msg">ক্যামেরা এরর: ${err.name} - ${err.message} <br>দয়া করে পারমিশন Allow করুন অথবা ব্রাউজারের সাইট সেটিংস চেক করুন।</span>`;
-            });
-        }
+        // ২. ভিউয়ার যখন ভিডিওর জন্য কল করবে, তখন কল রিসিভ করে ভিডিও পাঠানো
+        peer.on('call', (call) => {
+            document.getElementById('status').innerText = "ভিউয়ার কানেক্ট হয়েছে! লাইভ সম্প্রচার চলছে...";
+            call.answer(localStream); // ভিউয়ারকে ভিডিও স্ট্রিম দেওয়া হলো
+        });
 
+        // ৩. টর্চ লাইট কমান্ড শোনার জন্য ডাটা কানেকশন
         peer.on('connection', (conn) => {
-            document.getElementById('status').innerText = "ভিউয়ার কানেক্ট হয়েছে! ভিডিও পাঠানো হচ্ছে...";
-            peer.call(conn.peer, localStream);
+            conn.on('data', (data) => {
+                if (data === 'toggle-flash') {
+                    toggleFlashlight();
+                }
+            });
         });
+
+        function toggleFlashlight() {
+            if (!localStream) return;
+            const track = localStream.getVideoTracks()[0];
+            const hasTorch = track.getCapabilities().torch;
+            if (hasTorch) {
+                const isTorchOn = track.getConstraints().advanced?.[0]?.torch;
+                track.applyConstraints({ advanced: [{ torch: !isTorchOn }] });
+            }
+        }
     </script>
 </body>
 </html>
